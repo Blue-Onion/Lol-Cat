@@ -1,12 +1,17 @@
 package torrentfile
 
 import (
+	"encoding/binary"
+	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"strconv"
 
 	"github.com/jackpal/bencode-go"
 )
+
+const peerSize = 6
 
 type bencodeInfo struct {
 	Pieces      string `bencode:"pieces"`
@@ -28,6 +33,10 @@ type Torrentfile struct {
 	Name        string
 	InfoHashes  [20]byte
 	PieceHashes [][20]byte
+}
+type Peer struct {
+	IP   net.IP
+	Port uint16
 }
 
 func Open(r io.Reader) (*bencodeTorrent, error) {
@@ -57,4 +66,17 @@ func (t *Torrentfile) buildTracker(peerId [20]byte, port uint16) (string, error)
 }
 func (bto bencodeTorrent) toTorrentFile() (*Torrentfile, error) {
 	return nil, nil
+}
+func Unmarshal(peersBin []byte) ([]Peer, error) {
+	numsPeer := len(peersBin) / peerSize
+	if len(peersBin)%peerSize != 0 {
+		return nil, fmt.Errorf("malformed compact peer data: length %d is not divisible by %d", len(peersBin), peerSize)
+	}
+	peers := make([]Peer, numsPeer)
+	for i := range numsPeer {
+		offset := i * peerSize
+		peers[i].IP = net.IP(peersBin[offset : offset+4])
+		peers[i].Port = binary.BigEndian.Uint16(peersBin[offset+4 : offset+6])
+	}
+	return peers, nil
 }
